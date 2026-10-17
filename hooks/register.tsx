@@ -2,9 +2,9 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { FleetAgent, FleetLimit, FleetSession, FleetView } from '../types'
-import { waitText, EDIT_TOOLS, NOT_TYPED, isHostId, isPlanLimit, archiveOf, withFleetLimits, ZERO, currentLimits, forecastFull, fullIn, sameWindow, isFullShown as shownFull, plural, isAgentLive, isBusy, pickName, addUsage, arrange, attentionKey, describeTool, firstLine, kindOfTool, nameOf, parseSession, progressOf, summarize, tasksAfter, totalTokens, windowOf } from './describe'
+import { waitText, EDIT_TOOLS, NOT_TYPED, isHostId, isPlanLimit, archiveOf, withFleetLimits, ZERO, currentLimits, forecastFull, fullIn, sameWindow, isFullShown as shownFull, plural, isAgentLive, isBusy, isDormant, pickName, addUsage, arrange, attentionKey, describeTool, firstLine, kindOfTool, nameOf, parseSession, progressOf, summarize, tasksAfter, totalTokens, windowOf } from './describe'
 import { colonyDueAt, noteColonyForced } from './colony-scene'
-import { band, dashboard } from './draw'
+import { band, dashboard, listMaxTop } from './draw'
 import type { Actions, Board } from './draw'
 import type { LimitSample } from './describe'
 
@@ -15,6 +15,7 @@ const frame = atom({ plugin: 'fleet', key: 'frame' } as const, 0)
 // The side panel is the fleet's home; the band above the prompt is opt-in (/fleet band).
 const DEFAULT_VIEW: FleetView = { isCompact: false, isStill: false, showEnded: false, showBand: false, showColony: true, showAlerts: true }
 const view = atom({ plugin: 'fleet', key: 'view' } as const, DEFAULT_VIEW)
+const listTop = atom({ plugin: 'fleet', key: 'listTop' } as const, 0)
 
 const FRAME_MS = 400
 const TICK_MS = 2_000
@@ -110,7 +111,7 @@ const blank = (id: string, now: number): FleetSession => ({
 // real surface receives, since its drawing can't be watched from here. Checked at most every 10s.
 let debugCheckedAt = 0
 let isDebugging = false
-async function dumpPane($: EngineInterface, surface: string, columns: number, tree: unknown) {
+async function dumpPane($: EngineInterface, surface: string, columns: number, tree: unknown, room = '') {
   if (dir === '') return
   const now = await $.clock.now()
   if (now - debugCheckedAt >= 10_000) {
@@ -131,7 +132,7 @@ async function dumpPane($: EngineInterface, surface: string, columns: number, tr
     walk(el.children ?? p.children, depth + 1)
   }
   walk(tree, 0)
-  await $.fs.write(`${dir}/.debug-pane.txt`, `${new Date(now).toISOString()} surface=${surface} columns=${columns}\n${lines.join('\n')}\n`).catch(() => undefined)
+  await $.fs.write(`${dir}/.debug-pane.txt`, `${new Date(now).toISOString()} surface=${surface} columns=${columns} ${room}\n${lines.join('\n')}\n`).catch(() => undefined)
 }
 
 // Writes go one after another, each reading the record just before it writes, so an older write can
@@ -348,7 +349,7 @@ async function scan($: EngineInterface, isForced = false) {
     await update($, sessions, () => found)
   }
 
-  const all = arrange(found, lastScan, false)
+  const all = arrange(found, lastScan, false, myId || undefined)
   const sum = summarize(all, lastScan)
   // Only the other sessions that wait on the person: this one says so itself.
   const waiting = all.filter(s => s.state === 'waiting' && s.id !== myId)
@@ -429,12 +430,15 @@ const saveView = async ($: EngineInterface, fn: (v: FleetView) => FleetView) => 
 // Reads only what the drawing shows: never this session's own record, which changes on every
 // tool call, and never the frame, which only the terminal's text workers move by.
 async function board($: EngineInterface): Promise<Board> {
-  const [all, v] = await Promise.all([read($, sessions), read($, view)])
+  const [all, v, top] = await Promise.all([read($, sessions), read($, view), read($, listTop)])
   const now = await $.clock.now()
+  const keep = myId || undefined
   // Each row is judged on the whole fleet's plan limits.
-  const list = arrange(all, now, v.showEnded).map(s => withFleetLimits(s, all, now))
+  const list = arrange(all, now, v.showEnded, keep).map(s => withFleetLimits(s, all, now))
   return {
     list,
+    resting: v.showEnded ? 0 : arrange(all, now, true, keep).filter(s => s.id !== keep && isDormant(s, now)).length,
+    listTop: top,
     sum: summarize(list, now),
     limits: withForecast(currentLimits(all, now), now),
     v,
@@ -471,6 +475,7 @@ const actionsFor = ($: EngineInterface): Actions => ({
   hideBand: () => void saveView($, v => ({ ...v, showBand: false })),
   toggle: key => void saveView($, v => ({ ...v, [key]: !v[key] })),
   go: id => void go($, id),
+  scrollList: by => void update($, listTop, n => Math.min(listMaxTop(), Math.max(0, (n ?? 0) + by))),
 })
 
 // Tools that hold the main loop's call until the person answers, and what the row says meanwhile.
@@ -575,7 +580,7 @@ export const register: Register = on => {
         const now = await $.clock.now()
         if (now - terminalDrawAt > SEEN_MS) return
         const v = await read($, view)
-        const all = arrange(await read($, sessions), now, false)
+        const all = arrange(await read($, sessions), now, false, myId || undefined)
         if (!v.isStill && all.some(s => isBusy(s, now))) await update($, frame, n => (n + 1) % 1_000_000)
       })()
     })
@@ -636,7 +641,7 @@ export const register: Register = on => {
     }
     if (arg === 'ended') {
       const v = await saveView($, x => ({ ...x, showEnded: !x.showEnded }))
-      changed = v?.showEnded ? 'Showing ended sessions; /fleet ended hides them. ' : 'Ended sessions hidden; /fleet ended shows them. '
+      changed = v?.showEnded ? 'Showing ended sessions and those idle over 12 hours; /fleet ended hides them. ' : 'Ended sessions and those idle over 12 hours hidden; /fleet ended shows them. '
     }
     if (arg === 'colony') {
       const v = await saveView($, x => ({ ...x, showColony: x.showColony === false }))
@@ -648,7 +653,7 @@ export const register: Register = on => {
     if (opened.isPlaced) return { text: `${changed}Fleet is open in the side panel.` }
     isCardPending = true
     liveCardAt = await $.clock.now()
-    const sum = summarize(arrange(await read($, sessions), liveCardAt, false), liveCardAt)
+    const sum = summarize(arrange(await read($, sessions), liveCardAt, false, myId || undefined), liveCardAt)
     return { text: `${changed}Fleet: ${[plural(sum.sessions, 'session'), sum.working > 0 ? `${sum.working} working` : '', sum.waiting > 0 ? `${plural(sum.waiting, 'needs', 'need')} you` : '', sum.agents > 0 ? `${plural(sum.agents, 'agent')} running` : ''].filter(Boolean).join(', ')}.` }
   }).catch(() => ({ text: 'Fleet: still starting up in this session. Run /fleet again in a moment.' }))
 
@@ -671,9 +676,18 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const tree = dashboard($.ui.resolve(e), e.surface, await board($), actionsFor($), e.props.bodyColumns, await frameFor($, e.surface))
-    await dumpPane($, e.surface, e.props.bodyColumns, tree)
+    const bodyRows = e.props.scroll?.bodyRows
+    const tree = dashboard($.ui.resolve(e), e.surface, await board($), actionsFor($), e.props.bodyColumns, await frameFor($, e.surface), bodyRows)
+    await dumpPane($, e.surface, e.props.bodyColumns, tree, `bodyRows=${bodyRows} rows=${e.viewport?.rows} listMax=${listMaxTop()}`)
     return tree
+  })
+
+  // With the colony pinned under it, the list scrolls by itself: a wheel tick over the panel moves it a
+  // session at a time. A tree taller than the body (the room misjudged) scrolls as the engine would.
+  on('ui.scroll', { component: 'Pane', requestId: PANE }, async ($, e, next) => {
+    if (listMaxTop() === 0 || e.contentRows > e.bodyRows || e.by === 0) return next(e)
+    actionsFor($).scrollList(Math.sign(e.by))
+    return {}
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {

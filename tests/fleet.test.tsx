@@ -744,8 +744,8 @@ test('each /fleet option says what it changed and how to undo it; an unknown one
   const panel = ' Fleet is open in the side panel.'
   expect(await say('still')).toBe(`Motion stopped; /fleet animate restarts it.${panel}`)
   expect(await say('animate')).toBe(`Motion restarted; /fleet still stops it.${panel}`)
-  expect(await say('ended')).toBe(`Showing ended sessions; /fleet ended hides them.${panel}`)
-  expect(await say('ended')).toBe(`Ended sessions hidden; /fleet ended shows them.${panel}`)
+  expect(await say('ended')).toBe(`Showing ended sessions and those idle over 12 hours; /fleet ended hides them.${panel}`)
+  expect(await say('ended')).toBe(`Ended sessions and those idle over 12 hours hidden; /fleet ended shows them.${panel}`)
   expect(await say('colony')).toBe(`Colony hidden; /fleet colony shows it.${panel}`)
   expect(await say('colony')).toBe(`Colony shown; /fleet colony hides it.${panel}`)
   expect(opens).toBe(6)
@@ -1219,4 +1219,60 @@ test('status line: the warning goes once the use has stopped', async ($, on) => 
 test('terminal: the header names the forecast beside the 5-hour reading', async ($, on) => {
   const { card } = await climbing($, on, RISING, 'terminal')
   expect(await says(await card(), 'full ~22m')).toBe(true)
+})
+
+test('in a short panel the list scrolls above the colony, and sessions idle over 12 hours are counted, not listed', async ($, on) => {
+  const files = new Map<string, string>()
+  // The machine dates every file 60_000; idle times reach back from there.
+  const now = 60_000
+  const clock = mock.clock(on, { now })
+  machine(on, files, [])
+  openAnswer = { isPlaced: true }
+  on('ui.render', () => ({ type: 'Text', props: {}, children: ['stock'] }))
+  for (let i = 0; i < 8; i += 1) {
+    files.set(`${DIR}/row-${i}.json`, JSON.stringify({ ...other(now), id: `row-${i}`, title: `Session ${i}`, state: 'idle', now: 'Waiting for your reply', kind: 'idle', idleSince: now - 60_000, promptAt: now - (i + 1) * 120_000 }))
+  }
+  files.set(`${DIR}/sleepy.json`, JSON.stringify({ ...other(now), id: 'sleepy', title: 'Left for days', state: 'idle', now: 'Waiting for your reply', kind: 'idle', idleSince: now - 13 * 3_600_000, promptAt: now - 13 * 3_600_000 }))
+  await $.session.start({ surface: 'desktop', isInteractive: true, cwd: 'C:/work/BuiltByTing' })
+  await clock.advance(1)
+  const SHORT = { plugin: 'fleet', surface: 'desktop', component: 'Pane', requestId: 'fleet', viewport: { columns: 70, rows: 40 }, props: { bodyColumns: 64, scroll: { offset: 0, bodyRows: 40 } } } as never
+  let mounted: { unmount: () => Promise<unknown> } | null = null
+  const shown = async () => {
+    await mounted?.unmount()
+    const pane = await $.ui.mount(SHORT)
+    mounted = pane as never
+    const rows: string[] = []
+    // This session leads, its prompt the latest.
+    for (const id of ['me-1', ...Array.from({ length: 8 }, (_, i) => `row-${i}`)]) if ((await pane.find({ key: `r-${id}` } as never)) !== undefined) rows.push(id)
+    return { pane, rows }
+  }
+  const first = await shown()
+  // Some rows, not all; the first ones; the colony still drawn under them.
+  expect(first.rows.length).toBeGreaterThan(0)
+  expect(first.rows.length).toBeLessThan(9)
+  expect(first.rows[0]).toBe('me-1')
+  expect(await first.pane.find({ type: 'Text', text: `Sessions 1–${first.rows.length} of 9` } as never)).toBeDefined()
+  expect((await first.pane.find({ type: 'Client' } as never)) !== undefined || (await first.pane.find({ type: 'Svg', in: 'colony-19' } as never)) !== undefined).toBe(true)
+  expect(await first.pane.find({ type: 'Text', text: '1 session idle over 12h hidden · /fleet ended shows them' } as never)).toBeDefined()
+  expect(await says(first.pane, 'Left for days')).toBe(false)
+  expect(await first.pane.find({ key: 'up' } as never)).toBeUndefined()
+  // The pager moves it a session at a time.
+  await $.ui.press({ plugin: 'fleet', key: 'down' })
+  const second = await shown()
+  expect(second.rows[0]).toBe('row-0')
+  expect(await second.pane.find({ key: 'up' } as never)).toBeDefined()
+  // So does the wheel, which the engine then leaves where it is.
+  await $.ui.scroll({ component: 'Pane', requestId: 'fleet', offset: 1, by: 1, bodyRows: 40, contentRows: 40, origin: { kind: 'person' } } as never)
+  expect((await shown()).rows[0]).toBe('row-1')
+  // Never past the end: the last rows stay filled.
+  for (let i = 0; i < 10; i += 1) await $.ui.press({ plugin: 'fleet', key: 'down' }).catch(() => undefined)
+  const end = await shown()
+  expect(end.rows[end.rows.length - 1]).toBe('row-7')
+  expect(end.rows.length).toBe(first.rows.length)
+  // A tall panel lists everyone, with no pager.
+  await mounted?.unmount()
+  const tall = await $.ui.mount({ plugin: 'fleet', surface: 'desktop', component: 'Pane', requestId: 'fleet', viewport: { columns: 70, rows: 200 }, props: { bodyColumns: 64, scroll: { offset: 0, bodyRows: 200 } } } as never)
+  expect(await tall.find({ key: 'pager' } as never)).toBeUndefined()
+  expect(await tall.find({ key: 'r-row-7' } as never)).toBeDefined()
+  openAnswer = NO_PANEL
 })

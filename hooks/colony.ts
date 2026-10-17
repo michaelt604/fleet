@@ -1092,6 +1092,9 @@ const RANK: Readonly<Record<Look, number>> = { wait: 0, work: 1, chill: 2, faile
 // The colony as one SVG `scene.width` pixels wide, its walks and loops carried on to `now`. A crowd
 // too big to draw within the limit leaves out the least busy first; the line over the map still
 // counts everyone.
+// The drawing's height at a width, as drawColony lays it out: what a page region keeps room for.
+export const colonyHeight = (width: number): number => 4 + HEAD + Math.round(MAP_TALL * mapOf(width).k) + 12
+
 export function colonySvg(scene: ColonyScene, now: number): { source: string; height: number; alt: string } {
   let shown = scene.workers
   for (;;) {
