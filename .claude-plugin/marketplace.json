@@ -1,0 +1,12 @@
+{
+  "name": "fleet",
+  "description": "fleet: a live dashboard of every running Claude Code session and its subagents.",
+  "owner": { "name": "Michael Ting" },
+  "plugins": [
+    {
+      "name": "fleet",
+      "source": "./",
+      "description": "Live dashboard of every running session and its subagents, with animated workers. /fleet opens it."
+    }
+  ]
+}

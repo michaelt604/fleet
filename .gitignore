@@ -1,0 +1,14 @@
+# Written by the engine for the editor
+.claude-plugin/types/
+.mcpb-cache/
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.vscode/
+.idea/
+
+# Logs
+*.log
