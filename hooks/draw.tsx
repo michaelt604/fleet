@@ -3,7 +3,7 @@ import type { EngineInterface, RenderElement } from 'claude-code'
 import type { FleetLimit, FleetSession, FleetView } from '../types'
 import type { FleetSummary } from './describe'
 import { stateLine, waitText, limitName, limitTone, agentProgress, progressLabel, ago, isAgentLive, plain, taskText, recentLoops, isBusy, isHostId, isPlanLimit, resetIn, fullIn, plural, formatTokens, meter, modelName, nameOf, percentOf, progressOf, sprite, spriteKind, totalTokens } from './describe'
-import { colonyHeight, colonySvg } from './colony'
+import { colonySvg } from './colony'
 import { colonyScene } from './colony-scene'
 import { bandSvg, clean, ctxOf, dashboardSvg, hasAgentRows, visibleAgents, widthFor } from './svg'
 
@@ -13,8 +13,8 @@ const SVG_LIMIT = 130_000
 // All the row pictures together: a bigger fleet shows its first sessions and counts the rest.
 const TOTAL_LIMIT = 400_000
 
-// `resting`: dormant sessions left out of the list; `listTop`: the first row the panel's list shows.
-export type Board = { list: FleetSession[]; sum: FleetSummary; limits: FleetLimit[]; v: FleetView; mineId: string | undefined; now: number; resting?: number; listTop?: number }
+// `resting`: dormant sessions left out of the list.
+export type Board = { list: FleetSession[]; sum: FleetSummary; limits: FleetLimit[]; v: FleetView; mineId: string | undefined; now: number; resting?: number }
 
 export type Actions = {
   open: () => void
@@ -22,8 +22,6 @@ export type Actions = {
   toggle: (key: 'isCompact' | 'showColony') => void
   // Opens the desktop app's own window for a session by its id.
   go: (id: string) => void
-  // Moves the panel's list by that many sessions, held to the rows there are.
-  scrollList: (by: number) => void
 }
 
 // Every surface but the terminal draws an Svg; the terminal's table names it but draws nothing.
@@ -116,38 +114,7 @@ export function fittingCards(b: Board, width: number): { header: Card; rows: Row
   return null
 }
 
-// The desktop's code-font line in pixels, what a pane's body rows count in. Assumed, not reported:
-// a little over the real one, so the room is undershot rather than the colony pushed out of view.
-const LINE_PX = 20
-// What a line of Buttons or dim text under the list takes.
-const LINE_ROW_PX = 28
-
-// The furthest the list can scroll, as last drawn in the panel; scrollList holds to it.
-let maxTop = 0
-export const listMaxTop = (): number => maxTop
-
-// The session rows the panel shows when the list scrolls in `room` pixels above the colony: from the
-// first row asked for, as many as fit (always one). `last` is the furthest first row that still
-// fills the room, so a list that grew shorter shows no gap under its end.
-export function listWindow(heights: readonly number[], room: number, top: number): { from: number; to: number; last: number } {
-  let last = heights.length - 1
-  let used = heights[last] ?? 0
-  while (last > 0 && used + (heights[last - 1] ?? 0) <= room) {
-    last -= 1
-    used += heights[last] ?? 0
-  }
-  last = Math.max(0, last)
-  const from = Math.min(Math.max(0, top), last)
-  let to = from
-  let sum = 0
-  while (to < heights.length && (to === from || sum + (heights[to] ?? 0) <= room)) {
-    sum += heights[to] ?? 0
-    to += 1
-  }
-  return { from, to, last }
-}
-
-// The colony under the list, a drawing of its own. On the desktop it is a Client: the page keeps
+// The colony under the header, a drawing of its own. On the desktop it is a Client: the page keeps
 // that region across the panel's redraws and draws it again only when the scene changes, so a walk
 // is never restarted. Elsewhere it is an Svg drawn with the panel.
 function colony(ui: Ui, b: Board, width: number): RenderElement | null {
@@ -172,9 +139,10 @@ const restingNote = (ui: Ui, b: Board): RenderElement | null => {
   return b.resting ? <Text dimColor>{`${plural(b.resting, 'session')} idle over 12h hidden · /fleet ended shows them`}</Text> : null
 }
 
-// The full dashboard: an SVG card where the surface draws one, aligned text on the terminal. In a pane
-// (`bodyRows` known) with the colony shown, the list scrolls in the room above it, so the colony stays in view.
-export function dashboard(ui: Ui, surface: string, b: Board, act: Actions, columns: number, frame: number, bodyRows?: number): RenderElement {
+// The full dashboard: an SVG card where the surface draws one, aligned text on the terminal. The colony
+// sits under the header, so it is in view when the panel opens however long the list; the list scrolls
+// with the panel.
+export function dashboard(ui: Ui, surface: string, b: Board, act: Actions, columns: number, frame: number): RenderElement {
   const { Box, Text } = ui
   if (hasSvg(ui, surface)) {
     const width = widthFor(columns, 360, 1600)
@@ -182,23 +150,13 @@ export function dashboard(ui: Ui, surface: string, b: Board, act: Actions, colum
     const { Svg } = ui
     // A fleet too big to draw within the app's limit even in its smallest form falls through to text.
     if (cards) {
-      const { Button } = ui
-      const heights = cards.rows.map(c => c.main.height + (c.agents?.height ?? 0))
-      const isColony = b.v.showColony !== false && b.list.length > 0
-      const waitingHere = b.list.filter(s => s.state === 'waiting' && s.hostId !== undefined && isHostId(s.hostId) && s.id !== b.mineId).length
-      const fixed = cards.header.height + colonyHeight(width) + LINE_ROW_PX * (1 + waitingHere + (b.resting ? 1 : 0) + (cards.hidden > 0 ? 1 : 0)) + (waitingHere > 0 ? LINE_PX : 0)
-      const total = heights.reduce((n, x) => n + x, 0)
-      const room = bodyRows !== undefined && isColony ? bodyRows * LINE_PX - fixed : Infinity
-      // Past the room, the pager's own line comes out of it too.
-      const win = total > room ? listWindow(heights, room - LINE_ROW_PX, b.listTop ?? 0) : { from: 0, to: cards.rows.length, last: 0 }
-      if (bodyRows !== undefined) maxTop = win.last
-      const isPaged = win.from > 0 || win.to < cards.rows.length
       return (
         <Box flexDirection="column">
           <Svg key="head" source={cards.header.source} alt={altOf(b)} width={width} height={cards.header.height} />
+          {colony(ui, b, width)}
           {cards.rows.map((card, i) => {
             const s = b.list[i]
-            if (!s || i < win.from || i >= win.to) return null
+            if (!s) return null
             return (
               <Box key={`r-${s.id}`} flexDirection="column">
                 <Svg key={`row-${s.id}`} source={card.main.source} alt={rowAltOf(s, b)} width={width} height={card.main.height} />
@@ -206,17 +164,9 @@ export function dashboard(ui: Ui, surface: string, b: Board, act: Actions, colum
               </Box>
             )
           })}
-          {isPaged && (
-            <Box key="pager" flexDirection="row" columnGap={2}>
-              {win.from > 0 && <Button key="up" plain dimColor label="▲ Up" onPress={() => act.scrollList(-1)} />}
-              <Text dimColor>{`Sessions ${win.from + 1}–${win.to} of ${cards.rows.length}`}</Text>
-              {win.to < cards.rows.length && <Button key="down" plain dimColor label="▼ Down" onPress={() => act.scrollList(1)} />}
-            </Box>
-          )}
           {cards.hidden > 0 && <Text dimColor>+{cards.hidden} more sessions</Text>}
           {restingNote(ui, b)}
           {openers(ui, b, act)}
-          {colony(ui, b, width)}
           {controls(ui, b, act, true)}
         </Box>
       )

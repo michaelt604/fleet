@@ -2,7 +2,6 @@ import { expect, test } from 'claude-code/testing'
 
 import type { FleetSession } from '../types'
 import { cacheTtlOf, withFleetLimits, plain, taskText, currentLimits, jobOf, taskVote, agentProgress, pickName, progressLabel, sessionProgress, cacheLeft, cacheText, progressOf, progressText, tasksAfter, SPRITES, ZERO, arrange, describeTool, formatDuration, formatTokens, meter, modelName, parseSession, sprite, spriteKind, summarize, forecastFull, sameWindow, isFullShown, fullIn, DORMANT_MS } from '../hooks/describe'
-import { listWindow } from '../hooks/draw'
 
 test('a tool call reads as a few words about what it does', async () => {
   expect(describeTool('Edit', { file_path: 'C:\\x\\hooks\\register.tsx' })).toBe('Editing register.tsx')
@@ -298,14 +297,4 @@ test('a session idle over 12 hours is put away with the ended ones, unless it is
   expect(arrange(all, now, false, 'me').map(s => s.id).sort()).toEqual(['busy', 'fresh', 'me'])
   expect(arrange(all, now, false).map(s => s.id).sort()).toEqual(['busy', 'fresh'])
   expect(arrange(all, now, true).map(s => s.id).sort()).toEqual(['busy', 'fresh', 'legacy', 'me', 'old'])
-})
-
-test('the panel list shows as many whole sessions as fit from the one asked for, and never scrolls past its end', async () => {
-  const rows = [90, 90, 90, 90, 90]
-  expect(listWindow(rows, 200, 0)).toEqual({ from: 0, to: 2, last: 3 })
-  expect(listWindow(rows, 200, 1)).toEqual({ from: 1, to: 3, last: 3 })
-  // Past the end: held to the last first row that fills the room.
-  expect(listWindow(rows, 200, 9)).toEqual({ from: 3, to: 5, last: 3 })
-  // A room smaller than a row still shows one.
-  expect(listWindow(rows, 50, 2)).toEqual({ from: 2, to: 3, last: 4 })
 })

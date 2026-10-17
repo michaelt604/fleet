@@ -116,8 +116,6 @@ declare module 'claude-code' {
       sessions: FleetSession[]
       frame: number
       view: FleetView
-      // The first session row the desktop panel's list shows, when the list scrolls above the colony.
-      listTop: number
     }
   }
 }

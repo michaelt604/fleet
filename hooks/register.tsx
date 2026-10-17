@@ -4,7 +4,7 @@ import type { EngineInterface, Register } from 'claude-code'
 import type { FleetAgent, FleetLimit, FleetSession, FleetView } from '../types'
 import { waitText, EDIT_TOOLS, NOT_TYPED, isHostId, isPlanLimit, archiveOf, withFleetLimits, ZERO, currentLimits, forecastFull, fullIn, sameWindow, isFullShown as shownFull, plural, isAgentLive, isBusy, isDormant, pickName, addUsage, arrange, attentionKey, describeTool, firstLine, kindOfTool, nameOf, parseSession, progressOf, summarize, tasksAfter, totalTokens, windowOf } from './describe'
 import { colonyDueAt, noteColonyForced } from './colony-scene'
-import { band, dashboard, listMaxTop } from './draw'
+import { band, dashboard } from './draw'
 import type { Actions, Board } from './draw'
 import type { LimitSample } from './describe'
 
@@ -15,7 +15,6 @@ const frame = atom({ plugin: 'fleet', key: 'frame' } as const, 0)
 // The side panel is the fleet's home; the band above the prompt is opt-in (/fleet band).
 const DEFAULT_VIEW: FleetView = { isCompact: false, isStill: false, showEnded: false, showBand: false, showColony: true, showAlerts: true }
 const view = atom({ plugin: 'fleet', key: 'view' } as const, DEFAULT_VIEW)
-const listTop = atom({ plugin: 'fleet', key: 'listTop' } as const, 0)
 
 const FRAME_MS = 400
 const TICK_MS = 2_000
@@ -430,7 +429,7 @@ const saveView = async ($: EngineInterface, fn: (v: FleetView) => FleetView) => 
 // Reads only what the drawing shows: never this session's own record, which changes on every
 // tool call, and never the frame, which only the terminal's text workers move by.
 async function board($: EngineInterface): Promise<Board> {
-  const [all, v, top] = await Promise.all([read($, sessions), read($, view), read($, listTop)])
+  const [all, v] = await Promise.all([read($, sessions), read($, view)])
   const now = await $.clock.now()
   const keep = myId || undefined
   // Each row is judged on the whole fleet's plan limits.
@@ -438,7 +437,6 @@ async function board($: EngineInterface): Promise<Board> {
   return {
     list,
     resting: v.showEnded ? 0 : arrange(all, now, true, keep).filter(s => s.id !== keep && isDormant(s, now)).length,
-    listTop: top,
     sum: summarize(list, now),
     limits: withForecast(currentLimits(all, now), now),
     v,
@@ -475,7 +473,6 @@ const actionsFor = ($: EngineInterface): Actions => ({
   hideBand: () => void saveView($, v => ({ ...v, showBand: false })),
   toggle: key => void saveView($, v => ({ ...v, [key]: !v[key] })),
   go: id => void go($, id),
-  scrollList: by => void update($, listTop, n => Math.min(listMaxTop(), Math.max(0, (n ?? 0) + by))),
 })
 
 // Tools that hold the main loop's call until the person answers, and what the row says meanwhile.
@@ -676,18 +673,9 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const bodyRows = e.props.scroll?.bodyRows
-    const tree = dashboard($.ui.resolve(e), e.surface, await board($), actionsFor($), e.props.bodyColumns, await frameFor($, e.surface), bodyRows)
-    await dumpPane($, e.surface, e.props.bodyColumns, tree, `bodyRows=${bodyRows} rows=${e.viewport?.rows} listMax=${listMaxTop()}`)
+    const tree = dashboard($.ui.resolve(e), e.surface, await board($), actionsFor($), e.props.bodyColumns, await frameFor($, e.surface))
+    await dumpPane($, e.surface, e.props.bodyColumns, tree, `bodyRows=${e.props.scroll?.bodyRows} rows=${e.viewport?.rows}`)
     return tree
-  })
-
-  // With the colony pinned under it, the list scrolls by itself: a wheel tick over the panel moves it a
-  // session at a time. A tree taller than the body (the room misjudged) scrolls as the engine would.
-  on('ui.scroll', { component: 'Pane', requestId: PANE }, async ($, e, next) => {
-    if (listMaxTop() === 0 || e.contentRows > e.bodyRows || e.by === 0) return next(e)
-    actionsFor($).scrollList(Math.sign(e.by))
-    return {}
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {

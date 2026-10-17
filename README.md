@@ -1,6 +1,6 @@
 # fleet
 
-Every open Claude Code session and its subagents, live: what each is doing, how far along it is, context, cost, limits and prompt-cache time, with a pixel-art colony of the workers underneath.
+Every open Claude Code session and its subagents, live: what each is doing, how far along it is, context, cost, limits and prompt-cache time, with a pixel-art colony of the workers.
 
 A [Claude Code](https://claude.com/claude-code) mod (a hooks-module plugin). It runs in the terminal and in the desktop app's Code tab.
 
@@ -32,7 +32,7 @@ Fleet sees a session only once that session has fleet loaded, so sessions that w
 
 
 - **`/fleet`:** opens the dashboard in the app's side panel. Where the surface has no side panel, it draws the dashboard inline in the conversation instead. The panel also opens by itself at the first subagent of a session, unless you closed it.
-- **`/fleet colony`:** hide or show the colony under the list (shown by default; the panel's "Hide colony" button does the same).
+- **`/fleet colony`:** hide or show the colony (shown by default; the panel's "Hide colony" button does the same).
 - **`/fleet band`:** a strip of busy sessions above the prompt, for this session.
 - **`/fleet ended`:** also list ended and closed sessions, and those idle over 12 hours (all hidden by default).
 - **`/fleet still`** / **`/fleet animate`:** stop or restart all motion.
@@ -81,7 +81,7 @@ Workers wear a hat for their role, in their role's colour:
 
 Other agent types get a steady hat and colour of their own.
 
-In the colony, a pixel-art village under the list, each building is a general task. A small hanging sign shows it as a picture, with no words. The line over the map says it in words, once, counting everyone and leading with anyone who needs you, in amber: "1 needs you · 2 developing · 1 researching · 3 chilling".
+In the colony, a pixel-art village under the header, each building is a general task. A small hanging sign shows it as a picture, with no words. The line over the map says it in words, once, counting everyone and leading with anyone who needs you, in amber: "1 needs you · 2 developing · 1 researching · 3 chilling".
 
 | Building | Sign | Task |
 |---|---|---|
@@ -104,7 +104,7 @@ Each worker holds its task's tool (a hammer, a pickaxe, a book, a lens, a scroll
 
 **Why the colony doesn't jump:** the desktop rebuilds the panel's picture on every redraw, which restarts every animation in it. So on the desktop the colony is a `Client` region (`hooks/colony-view-19.tsx`; its file name and key carry the release, because the page keeps a module it has loaded even across a plugin reload) that the page keeps across those redraws. It gets plain scene data (`hooks/colony-scene.ts`) and draws again only when a worker's state changes, timed by the page's own clock. Other surfaces draw it as an ordinary Svg with the panel.
 
-**The colony stays in view.** In the side panel, when the sessions don't all fit above the colony, the list scrolls by itself, a session at a time, with the mouse wheel or the ▲ Up / ▼ Down buttons under it, and "Sessions 2–5 of 9" says where you are. The room is worked out from the panel's height in lines of the app's code font, taken as 20 pixels; if the colony still runs past the bottom, the whole panel scrolls as before.
+**The colony comes first.** In the side panel the colony sits right under the header, so it is in view when the panel opens however many sessions there are; the list follows it and scrolls with the panel's own scrollbar.
 
 On a wide panel, the village stays the same size and forest fills either side. A drawing in a page region is held to 100,000 characters, so at most 40 workers are drawn, and an unusually varied crowd leaves out the least busy first; the line over the map still counts everyone. `/fleet still` stops all motion, and so does the system's reduced-motion setting.
 
