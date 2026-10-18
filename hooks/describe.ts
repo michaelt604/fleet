@@ -230,13 +230,21 @@ export const waitingFor = (s: FleetSession, now: number): number => (s.state ===
 // The wait as "6m", once it is a minute or more; else empty.
 export const waitText = (s: FleetSession, now: number): string => (waitingFor(s, now) >= 60_000 ? ago(waitingFor(s, now)) : '')
 
-// Open sessions only (ended and vanished ones show with showEnded), the ones that need the person
-// first, longest-waiting first, then the most recently prompted. Working is not ranked above idle:
-// rows that reshuffle as sessions start and stop are hard to track.
-export function arrange(sessions: readonly FleetSession[], now: number, showEnded: boolean): FleetSession[] {
+// How long a session may rest untouched before it is put away with the ended ones. The desktop app
+// keeps every unarchived session loaded, so its heartbeat stays fresh for days.
+export const DORMANT_MS = 12 * 3_600_000
+
+// Idle past DORMANT_MS with nothing at work: no prompt, no subagent, no one waiting.
+export const isDormant = (s: FleetSession, now: number): boolean => s.state === 'idle' && !isBusy(s, now) && now - (s.idleSince ?? promptedAt(s)) >= DORMANT_MS
+
+// Open sessions only (ended, vanished and dormant ones show with showEnded; `keepId`, the session
+// looking, always shows), the ones that need the person first, longest-waiting first, then the most
+// recently prompted. Working is not ranked above idle: rows that reshuffle as sessions start and stop
+// are hard to track.
+export function arrange(sessions: readonly FleetSession[], now: number, showEnded: boolean, keepId?: string): FleetSession[] {
   return sessions
     .map(s => (isGone(s, now) ? { ...s, state: 'ended' as const, now: 'No heartbeat: closed or stopped' } : s))
-    .filter(s => (showEnded || s.state !== 'ended') && !isClutter(s))
+    .filter(s => (showEnded || (s.state !== 'ended' && (s.id === keepId || !isDormant(s, now)))) && !isClutter(s))
     .sort((a, b) => Number(b.state === 'waiting') - Number(a.state === 'waiting') || (a.state === 'waiting' && b.state === 'waiting' ? waitingFor(b, now) - waitingFor(a, now) : 0) || promptedAt(b) - promptedAt(a) || b.updatedAt - a.updatedAt)
 }
 

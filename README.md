@@ -1,6 +1,6 @@
 # fleet
 
-Every open Claude Code session and its subagents, live: what each is doing, how far along it is, context, cost, limits and prompt-cache time, with a pixel-art colony of the workers underneath.
+Every open Claude Code session and its subagents, live: what each is doing, how far along it is, context, cost, limits and prompt-cache time, with a pixel-art colony of the workers.
 
 A [Claude Code](https://claude.com/claude-code) mod (a hooks-module plugin). It runs in the terminal and in the desktop app's Code tab.
 
@@ -32,9 +32,9 @@ Fleet sees a session only once that session has fleet loaded, so sessions that w
 
 
 - **`/fleet`:** opens the dashboard in the app's side panel. Where the surface has no side panel, it draws the dashboard inline in the conversation instead. The panel also opens by itself at the first subagent of a session, unless you closed it.
-- **`/fleet colony`:** hide or show the colony under the list (shown by default; the panel's "Hide colony" button does the same).
+- **`/fleet colony`:** hide or show the colony (shown by default; the panel's "Hide colony" button does the same).
 - **`/fleet band`:** a strip of busy sessions above the prompt, for this session.
-- **`/fleet ended`:** also list ended and closed sessions (hidden by default).
+- **`/fleet ended`:** also list ended and closed sessions, and those idle over 12 hours (all hidden by default).
 - **`/fleet still`** / **`/fleet animate`:** stop or restart all motion.
 - **`/fleet alerts`:** turn the toasts on or off (on by default). When another session starts needing you, and the panel is open, a toast gives its name and what it waits on ("Aria: Needs your OK: run npm test").
 - Each option replies with what it changed and how to undo it. An option it doesn't know gets a reply listing the ones it does.
@@ -43,6 +43,8 @@ Fleet sees a session only once that session has fleet loaded, so sessions that w
 A session that needs you shows how long it has waited once that is a minute (`needs you 6m`, and `⚑ needs you: Aria 6m, Bram` in the status line), and the longest-waiting leads.
 
 Sessions that need you are listed first. The rest go by their latest prompt, newest first, and don't move when a session starts or stops. A background task's notification doesn't count as a prompt.
+
+Sessions idle for more than 12 hours, with no subagent still at work, are left out too: the desktop app keeps every session you haven't archived loaded, so they never end by themselves. A dim line under the list counts them ("3 sessions idle over 12h hidden · /fleet ended shows them"). The session you're in always shows in its own panel.
 
 Sessions you have archived in the desktop app are left out, even with `/fleet ended`. They are read from the app's own session records (`claude-code-sessions` in its data folder), checked about once a minute; unarchive one and it returns.
 
@@ -79,7 +81,7 @@ Workers wear a hat for their role, in their role's colour:
 
 Other agent types get a steady hat and colour of their own.
 
-In the colony, a pixel-art village under the list, each building is a general task. A small hanging sign shows it as a picture, with no words. The line over the map says it in words, once, counting everyone and leading with anyone who needs you, in amber: "1 needs you · 2 developing · 1 researching · 3 chilling".
+In the colony, a pixel-art village under the header, each building is a general task. A small hanging sign shows it as a picture, with no words. The line over the map says it in words, once, counting everyone and leading with anyone who needs you, in amber: "1 needs you · 2 developing · 1 researching · 3 chilling".
 
 | Building | Sign | Task |
 |---|---|---|
@@ -101,6 +103,8 @@ In the colony, a pixel-art village under the list, each building is a general ta
 Each worker holds its task's tool (a hammer, a pickaxe, a book, a lens, a scroll or a flask). Captains wear a gold crown, each in a colour of its own. Most workers also wear a little something of their own, always the same one: shades, round specs, a scarf, a bow tie, rosy cheeks, a mustache, a backpack or a pin. Workers at work have a progress bar over their head and their name right under their feet, in small light letters with no box (over a bare head when a sign is in the way). A name is never put further off, where it would read as a neighbour's: in a crowd with no room, it is left out, those who need you named first. A walker's name shows once it arrives. Workers at play or asleep go unnamed; the line over the map counts them, and the list above names everyone.
 
 **Why the colony doesn't jump:** the desktop rebuilds the panel's picture on every redraw, which restarts every animation in it. So on the desktop the colony is a `Client` region (`hooks/colony-view-19.tsx`; its file name and key carry the release, because the page keeps a module it has loaded even across a plugin reload) that the page keeps across those redraws. It gets plain scene data (`hooks/colony-scene.ts`) and draws again only when a worker's state changes, timed by the page's own clock. Other surfaces draw it as an ordinary Svg with the panel.
+
+**The colony comes first.** In the side panel the colony sits right under the header, so it is in view when the panel opens however many sessions there are; the list follows it and scrolls with the panel's own scrollbar.
 
 On a wide panel, the village stays the same size and forest fills either side. A drawing in a page region is held to 100,000 characters, so at most 40 workers are drawn, and an unusually varied crowd leaves out the least busy first; the line over the map still counts everyone. `/fleet still` stops all motion, and so does the system's reduced-motion setting.
 

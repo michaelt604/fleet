@@ -13,7 +13,8 @@ const SVG_LIMIT = 130_000
 // All the row pictures together: a bigger fleet shows its first sessions and counts the rest.
 const TOTAL_LIMIT = 400_000
 
-export type Board = { list: FleetSession[]; sum: FleetSummary; limits: FleetLimit[]; v: FleetView; mineId: string | undefined; now: number }
+// `resting`: dormant sessions left out of the list.
+export type Board = { list: FleetSession[]; sum: FleetSummary; limits: FleetLimit[]; v: FleetView; mineId: string | undefined; now: number; resting?: number }
 
 export type Actions = {
   open: () => void
@@ -113,7 +114,7 @@ export function fittingCards(b: Board, width: number): { header: Card; rows: Row
   return null
 }
 
-// The colony under the list, a drawing of its own. On the desktop it is a Client: the page keeps
+// The colony under the header, a drawing of its own. On the desktop it is a Client: the page keeps
 // that region across the panel's redraws and draws it again only when the scene changes, so a walk
 // is never restarted. Elsewhere it is an Svg drawn with the panel.
 function colony(ui: Ui, b: Board, width: number): RenderElement | null {
@@ -132,7 +133,15 @@ function colony(ui: Ui, b: Board, width: number): RenderElement | null {
   return drawing.source.length <= SVG_LIMIT ? <Svg source={drawing.source} alt={drawing.alt} width={width} height={drawing.height} /> : null
 }
 
-// The full dashboard: an SVG card where the surface draws one, aligned text on the terminal.
+// What the list leaves out, under it: the sessions put away for resting too long.
+const restingNote = (ui: Ui, b: Board): RenderElement | null => {
+  const { Text } = ui
+  return b.resting ? <Text dimColor>{`${plural(b.resting, 'session')} idle over 12h hidden · /fleet ended shows them`}</Text> : null
+}
+
+// The full dashboard: an SVG card where the surface draws one, aligned text on the terminal. The colony
+// sits under the header, so it is in view when the panel opens however long the list; the list scrolls
+// with the panel.
 export function dashboard(ui: Ui, surface: string, b: Board, act: Actions, columns: number, frame: number): RenderElement {
   const { Box, Text } = ui
   if (hasSvg(ui, surface)) {
@@ -144,6 +153,7 @@ export function dashboard(ui: Ui, surface: string, b: Board, act: Actions, colum
       return (
         <Box flexDirection="column">
           <Svg key="head" source={cards.header.source} alt={altOf(b)} width={width} height={cards.header.height} />
+          {colony(ui, b, width)}
           {cards.rows.map((card, i) => {
             const s = b.list[i]
             if (!s) return null
@@ -155,8 +165,8 @@ export function dashboard(ui: Ui, surface: string, b: Board, act: Actions, colum
             )
           })}
           {cards.hidden > 0 && <Text dimColor>+{cards.hidden} more sessions</Text>}
+          {restingNote(ui, b)}
           {openers(ui, b, act)}
-          {colony(ui, b, width)}
           {controls(ui, b, act, true)}
         </Box>
       )
@@ -249,6 +259,7 @@ export function dashboard(ui: Ui, surface: string, b: Board, act: Actions, colum
       <Box flexDirection="column" marginTop={1}>
         {b.list.length === 0 ? <Text dimColor>No sessions yet. Sessions started after the fleet mod was installed appear here.</Text> : b.list.map(row)}
       </Box>
+      {restingNote(ui, b)}
       {openers(ui, b, act)}
       {controls(ui, b, act, false)}
     </Box>

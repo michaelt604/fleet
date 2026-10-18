@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import type { FleetSession } from '../types'
-import { cacheTtlOf, withFleetLimits, plain, taskText, currentLimits, jobOf, taskVote, agentProgress, pickName, progressLabel, sessionProgress, cacheLeft, cacheText, progressOf, progressText, tasksAfter, SPRITES, ZERO, arrange, describeTool, formatDuration, formatTokens, meter, modelName, parseSession, sprite, spriteKind, summarize, forecastFull, sameWindow, isFullShown, fullIn } from '../hooks/describe'
+import { cacheTtlOf, withFleetLimits, plain, taskText, currentLimits, jobOf, taskVote, agentProgress, pickName, progressLabel, sessionProgress, cacheLeft, cacheText, progressOf, progressText, tasksAfter, SPRITES, ZERO, arrange, describeTool, formatDuration, formatTokens, meter, modelName, parseSession, sprite, spriteKind, summarize, forecastFull, sameWindow, isFullShown, fullIn, DORMANT_MS } from '../hooks/describe'
 
 test('a tool call reads as a few words about what it does', async () => {
   expect(describeTool('Edit', { file_path: 'C:\\x\\hooks\\register.tsx' })).toBe('Editing register.tsx')
@@ -280,3 +280,21 @@ test('the status line shows the forecast under an hour, keeps it until 70 minute
   }
 })
 
+
+test('a session idle over 12 hours is put away with the ended ones, unless it is the one looking or still has work', async () => {
+  const now = 100 * 3_600_000
+  const agent = { id: 'a', type: 'Explore', description: '', model: '', state: 'working' as const, now: '', startedAt: now - 1_000, endedAt: null, lastAt: now - 1_000, tokens: ZERO, contextTokens: 0, contextWindow: 0, steps: 0, tools: 0 }
+  const all = [
+    session({ id: 'fresh', state: 'idle', idleSince: now - DORMANT_MS + 60_000, updatedAt: now }),
+    session({ id: 'old', state: 'idle', idleSince: now - DORMANT_MS - 60_000, updatedAt: now }),
+    session({ id: 'me', state: 'idle', idleSince: now - 2 * DORMANT_MS, updatedAt: now }),
+    // No idleSince: judged by its last prompt.
+    session({ id: 'legacy', state: 'idle', promptAt: now - 2 * DORMANT_MS, updatedAt: now }),
+    // Resting, but a background subagent still works.
+    session({ id: 'busy', state: 'idle', idleSince: now - 2 * DORMANT_MS, updatedAt: now, agents: [agent] }),
+  ]
+  expect(DORMANT_MS).toBe(12 * 3_600_000)
+  expect(arrange(all, now, false, 'me').map(s => s.id).sort()).toEqual(['busy', 'fresh', 'me'])
+  expect(arrange(all, now, false).map(s => s.id).sort()).toEqual(['busy', 'fresh'])
+  expect(arrange(all, now, true).map(s => s.id).sort()).toEqual(['busy', 'fresh', 'legacy', 'me', 'old'])
+})
