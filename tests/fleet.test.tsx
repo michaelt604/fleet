@@ -28,10 +28,10 @@ const BAND = (surface: Surface) =>
     props: { hasSurvey: false, isWorking: false, maxRows: 8, bodyColumns: 150, scroll: { offset: 0, bodyRows: 8 }, view: {} },
   }) as const
 
-import colonyView from '../hooks/colony-view-25'
+import colonyView from '../hooks/colony-view-26'
 
 // The Client module's number, which draw.tsx's file name and key carry (they change together).
-const COLONY_VIEW_NUMBER = '25'
+const COLONY_VIEW_NUMBER = '26'
 
 const DIR = 'C:/Users/me/.claude/fleet'
 
@@ -366,8 +366,8 @@ test('a turn leaves a receipt; slow tools, quiet agents, token limits, forks, mo
   for await (const _ of $.turn.step({ turnId: 'f1', index: 0, model: 'claude-haiku-5-5', messageCount: 1, agentId: 'fork-9' } as never)) void _
   await $.session.compact({ trigger: 'manual', messages: [{ role: 'user', text: 'Summary of the work so far', toolUses: [] }] } as never)
   await clock.advance(1)
-  // The first subagent opened the panel by itself.
-  expect(opens).toBe(1)
+  // A subagent never opens the panel by itself: only /fleet does.
+  expect(opens).toBe(0)
   await clock.advance(4 * 60_000)
   await $.turn.complete({ turnId: 't1', reason: 'answer', answer: 'Done.' } as never)
   await clock.advance(600)
@@ -395,7 +395,7 @@ test('a turn leaves a receipt; slow tools, quiet agents, token limits, forks, mo
   const colony = (await card.find({ type: 'Client' })) as Found
   const scene = colony?.props.props as { workers: { name: string; fx: number; fy: number }[] }
   expect(scene.workers.find(w => w.name === mine.agents[0]?.name)).toMatchObject({ fx: 160, fy: 60 })
-  const drawn = String(((await card.find({ type: 'Svg', in: 'colony-25' } as never)) as Found)?.props.source)
+  const drawn = String(((await card.find({ type: 'Svg', in: 'colony-26' } as never)) as Found)?.props.source)
   expect(drawn).toContain('>Colony<')
   expect(isWellFormed(drawn)).toBe(true)
   // Another redraw of the panel with nothing new for the colony hands it the same scene.
@@ -441,7 +441,7 @@ test('a fleet too big to draw whole still draws, within the app\'s limit on a dr
   expect(pictures.every(p => p.length <= 131_072)).toBe(true)
   expect(pictures.some(p => p.length > 1_000)).toBe(true)
   expect(isWellFormed(pictures.join(''))).toBe(true)
-  const colony = String(((await pane.find({ type: 'Svg', in: 'colony-25' } as never)) as Found)?.props.source)
+  const colony = String(((await pane.find({ type: 'Svg', in: 'colony-26' } as never)) as Found)?.props.source)
   expect(colony).toContain('>Colony<')
   expect(JSON.stringify(colony).length <= 96_000).toBe(true)
   expect(isWellFormed(colony)).toBe(true)
@@ -1248,4 +1248,45 @@ test('the colony sits under the header, ahead of a long list, and sessions idle 
   expect(await pane.find({ key: 'pager' } as never)).toBeUndefined()
   expect(await pane.find({ type: 'Text', text: '1 session idle over 12h hidden · /fleet ended shows them' } as never)).toBeDefined()
   expect(await says(pane, 'Left for days')).toBe(false)
+})
+
+test("a panel whose page is off screen holds still, and catches up the moment the page is seen again", async ($, on) => {
+  const files = new Map<string, string>()
+  const now = 60_000
+  const clock = mock.clock(on, { now })
+  machine(on, files, [])
+  openAnswer = { isPlaced: true }
+  paneShown = true
+  on('ui.render', () => ({ type: 'Text', props: {}, children: ['stock'] }))
+  const write = (title: string, at: number) => files.set(`${DIR}/other-2.json`, JSON.stringify({ ...other(at), title, state: 'working', now: 'Editing a.ts', kind: 'editing' }))
+  write('First title', now)
+  await $.session.start({ surface: 'desktop', isInteractive: true, cwd: 'C:/work/BuiltByTing' })
+  await clock.advance(1)
+  const pane = await $.ui.mount({ plugin: 'fleet', surface: 'desktop', component: 'Pane', requestId: 'fleet', viewport: { columns: 70, rows: 40 }, props: { bodyColumns: 64, scroll: { offset: 0, bodyRows: 40 } } } as never)
+  // The colony module's own clock, run at full speed: the page on screen, as the module itself tells it.
+  const seen = () => pane.advance(1_000)
+  expect(await says(pane, 'First title')).toBe(true)
+  // On screen: the page says so every second, and a change is drawn.
+  for (let i = 0; i < 6; i += 1) {
+    await seen()
+    await clock.advance(1_000)
+  }
+  write('Second title', 66_000)
+  for (let i = 0; i < 4; i += 1) {
+    await seen()
+    await clock.advance(1_000)
+  }
+  expect(await says(pane, 'Second title')).toBe(true)
+  // Off screen: the page goes quiet, and the panel holds what it showed.
+  await clock.advance(5_000)
+  write('Third title', 75_000)
+  await clock.advance(6_000)
+  expect(await says(pane, 'Second title')).toBe(true)
+  expect(await says(pane, 'Third title')).toBe(false)
+  // Seen again: drawn at once.
+  await seen()
+  await clock.advance(1)
+  expect(await says(pane, 'Third title')).toBe(true)
+  openAnswer = NO_PANEL
+  paneShown = false
 })

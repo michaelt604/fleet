@@ -125,7 +125,7 @@ function colony(ui: Ui, b: Board, width: number): RenderElement | null {
     // The page keeps a surface module it has loaded, even across a plugin reload, so a colony change
     // would never reach an open panel. The module's file and key carry the release, so a new one
     // loads fresh: rename both together whenever the colony's drawing changes.
-    return <Client key="colony-25" module="./colony-view-25.tsx" props={b.probe ? { ...scene, probe: true } : scene} />
+    return <Client key="colony-26" module="./colony-view-26.tsx" props={b.probe ? { ...scene, probe: true } : scene} />
   }
   if (!('Svg' in ui)) return null
   const drawing = colonySvg(scene, b.now)

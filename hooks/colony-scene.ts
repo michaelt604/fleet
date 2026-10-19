@@ -8,7 +8,7 @@ import { visibleAgents } from './svg'
 // Who stands where in the colony, decided in the hooks module, where it can remember: each worker's
 // task held steady, its spot kept, its walk timed. The scene it hands the drawing is plain data that
 // stays the same from one redraw to the next until something about a worker changes, so the page
-// (colony-view-25.tsx) draws again only then, and a walk under way is never restarted.
+// (colony-view-26.tsx) draws again only then, and a walk under way is never restarted.
 
 // A worker as this module sees it: `job` what it was asked to do, `vote` what its current step says,
 // `look` what its state says right now, and since when, where the heartbeat says (`changedAt`).

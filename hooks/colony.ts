@@ -10,7 +10,7 @@ import { THEME, PAD, clean, escape, measure, roleOf } from './svg'
 // a finished subagent sleeps by the tents. It is for fun: each worker shows only its name.
 //
 // This module only draws: a scene in, an SVG out. It runs in the hooks module and, on the desktop,
-// in the page itself (colony-view-25.tsx), so a redraw of the panel never restarts a walk.
+// in the page itself (colony-view-26.tsx), so a redraw of the panel never restarts a walk.
 // colony-scene.ts decides who stands where.
 
 export const P = 2 // one art pixel, in map units
