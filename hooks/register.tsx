@@ -76,6 +76,8 @@ let liveCardAt = 0
 // When a terminal drawing (which animates by frames) last drew: the frame clock runs only then.
 let terminalDrawAt = 0
 const seenCards = new Set<string>()
+// The colony's timing reports while debugging, written to .debug-colony.txt.
+let probeLines: string[] = []
 
 const blank = (id: string, now: number): FleetSession => ({
   v: 1,
@@ -437,6 +439,7 @@ async function board($: EngineInterface): Promise<Board> {
   return {
     list,
     resting: v.showEnded ? 0 : arrange(all, now, true, keep).filter(s => s.id !== keep && isDormant(s, now)).length,
+    probe: isDebugging,
     sum: summarize(list, now),
     limits: withForecast(currentLimits(all, now), now),
     v,
@@ -676,6 +679,14 @@ export const register: Register = on => {
     const tree = dashboard($.ui.resolve(e), e.surface, await board($), actionsFor($), e.props.bodyColumns, await frameFor($, e.surface))
     await dumpPane($, e.surface, e.props.bodyColumns, tree, `bodyRows=${e.props.scroll?.bodyRows} rows=${e.viewport?.rows}`)
     return tree
+  })
+
+  // The colony's timing reports (only while debugging): the newest last, the last 60 kept.
+  on('ui.message', { component: 'Pane', requestId: PANE }, async ($, e, next) => {
+    if (dir === '' || !isDebugging) return next(e)
+    probeLines = [...probeLines, `${new Date().toISOString()} ${JSON.stringify(e.data)}`].slice(-60)
+    await $.fs.write(`${dir}/.debug-colony.txt`, `${probeLines.join('\n')}\n`).catch(() => undefined)
+    return next(e)
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {

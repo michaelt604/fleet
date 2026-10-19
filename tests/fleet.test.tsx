@@ -28,10 +28,10 @@ const BAND = (surface: Surface) =>
     props: { hasSurvey: false, isWorking: false, maxRows: 8, bodyColumns: 150, scroll: { offset: 0, bodyRows: 8 }, view: {} },
   }) as const
 
-import colonyView from '../hooks/colony-view-19'
+import colonyView from '../hooks/colony-view-25'
 
 // The Client module's number, which draw.tsx's file name and key carry (they change together).
-const COLONY_VIEW_NUMBER = '19'
+const COLONY_VIEW_NUMBER = '25'
 
 const DIR = 'C:/Users/me/.claude/fleet'
 
@@ -395,7 +395,7 @@ test('a turn leaves a receipt; slow tools, quiet agents, token limits, forks, mo
   const colony = (await card.find({ type: 'Client' })) as Found
   const scene = colony?.props.props as { workers: { name: string; fx: number; fy: number }[] }
   expect(scene.workers.find(w => w.name === mine.agents[0]?.name)).toMatchObject({ fx: 160, fy: 60 })
-  const drawn = String(((await card.find({ type: 'Svg', in: 'colony-19' } as never)) as Found)?.props.source)
+  const drawn = String(((await card.find({ type: 'Svg', in: 'colony-25' } as never)) as Found)?.props.source)
   expect(drawn).toContain('>Colony<')
   expect(isWellFormed(drawn)).toBe(true)
   // Another redraw of the panel with nothing new for the colony hands it the same scene.
@@ -441,7 +441,7 @@ test('a fleet too big to draw whole still draws, within the app\'s limit on a dr
   expect(pictures.every(p => p.length <= 131_072)).toBe(true)
   expect(pictures.some(p => p.length > 1_000)).toBe(true)
   expect(isWellFormed(pictures.join(''))).toBe(true)
-  const colony = String(((await pane.find({ type: 'Svg', in: 'colony-19' } as never)) as Found)?.props.source)
+  const colony = String(((await pane.find({ type: 'Svg', in: 'colony-25' } as never)) as Found)?.props.source)
   expect(colony).toContain('>Colony<')
   expect(JSON.stringify(colony).length <= 96_000).toBe(true)
   expect(isWellFormed(colony)).toBe(true)
