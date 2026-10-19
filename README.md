@@ -31,7 +31,7 @@ Fleet sees a session only once that session has fleet loaded, so sessions that w
 ## Usage
 
 
-- **`/fleet`:** opens the dashboard in the app's side panel. Where the surface has no side panel, it draws the dashboard inline in the conversation instead. The panel also opens by itself at the first subagent of a session, unless you closed it.
+- **`/fleet`:** opens the dashboard in the app's side panel. Where the surface has no side panel, it draws the dashboard inline in the conversation instead. It opens only where you ask for it: a session never opens it by itself.
 - **`/fleet colony`:** hide or show the colony (shown by default; the panel's "Hide colony" button does the same).
 - **`/fleet band`:** a strip of busy sessions above the prompt, for this session.
 - **`/fleet ended`:** also list ended and closed sessions, and those idle over 12 hours (all hidden by default).
@@ -102,7 +102,9 @@ In the colony, a pixel-art village under the header, each building is a general 
 
 Each worker holds its task's tool (a hammer, a pickaxe, a book, a lens, a scroll or a flask). Captains wear a gold crown, each in a colour of its own. Most workers also wear a little something of their own, always the same one: shades, round specs, a scarf, a bow tie, rosy cheeks, a mustache, a backpack or a pin. Workers at work have a progress bar over their head and their name right under their feet, in small light letters with no box (over a bare head when a sign is in the way). A name is never put further off, where it would read as a neighbour's: in a crowd with no room, it is left out, those who need you named first. A walker's name shows once it arrives. Workers at play or asleep go unnamed; the line over the map counts them, and the list above names everyone.
 
-**Why the colony doesn't jump:** the desktop rebuilds the panel's picture on every redraw, which restarts every animation in it. So on the desktop the colony is a `Client` region (`hooks/colony-view-19.tsx`; its file name and key carry the release, because the page keeps a module it has loaded even across a plugin reload) that the page keeps across those redraws. It gets plain scene data (`hooks/colony-scene.ts`) and draws again only when a worker's state changes, timed by the page's own clock. Other surfaces draw it as an ordinary Svg with the panel.
+**Why the colony doesn't jump:** the desktop rebuilds the panel's picture on every redraw, which restarts every animation in it. So on the desktop the colony is a `Client` region (`hooks/colony-view-26.tsx`; its file name and key carry the release, because the page keeps a module it has loaded even across a plugin reload) that the page keeps across those redraws. It gets plain scene data (`hooks/colony-scene.ts`) and draws again only when a worker's state changes, timed by the page's own clock. Other surfaces draw it as an ordinary Svg with the panel.
+
+**A panel you can't see isn't drawn.** The app keeps every session's page loaded, and each open panel would redraw on every change in the fleet. So the colony's page reports whether it is on screen (its clock runs at full speed only there), and a panel off screen holds still until you come back to it, then catches up at once.
 
 **The colony comes first.** In the side panel the colony sits right under the header, so it is in view when the panel opens however many sessions there are; the list follows it and scrolls with the panel's own scrollbar.
 

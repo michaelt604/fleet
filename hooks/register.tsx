@@ -28,6 +28,11 @@ const DAY_MS = 86_400_000
 const ARCHIVE_MS = 60_000
 // A drawing counts as on screen while it has drawn this recently.
 const SEEN_MS = 3_000
+// The colony's page says it is on screen about once a second while its clock runs at full speed; a
+// page off screen is throttled and goes quiet. Quiet this long means off screen. A colony just drawn
+// gets ONSCREEN_GRACE_MS to say so first.
+const ONSCREEN_MS = 3_000
+const ONSCREEN_GRACE_MS = 5_000
 // The newest /fleet card stays live this long, then holds still to spare redraws.
 const LIVE_CARD_MS = 10 * 60_000
 
@@ -76,6 +81,15 @@ let liveCardAt = 0
 // When a terminal drawing (which animates by frames) last drew: the frame clock runs only then.
 let terminalDrawAt = 0
 const seenCards = new Set<string>()
+// The colony's timing reports while debugging, written to .debug-colony.txt.
+let probeLines: string[] = []
+// When the colony's page last said it is on screen, and when this session's panel first drew a colony
+// (0: no colony, so no word from the page; the panel counts as on screen). Off screen, the fleet is
+// read but not drawn (`isHeld`), so a session in the background costs the app nothing to redraw.
+let seenAt = 0
+let colonyAt = 0
+let isHeld = false
+const isOnScreen = (now: number): boolean => colonyAt === 0 || now - seenAt < ONSCREEN_MS || now - colonyAt < ONSCREEN_GRACE_MS
 
 const blank = (id: string, now: number): FleetSession => ({
   v: 1,
@@ -343,8 +357,12 @@ async function scan($: EngineInterface, isForced = false) {
   // This session stays in its own panel even once archived.
   found = found.filter(s => !archived.has(s.id) || s.id === myId)
   const signature = signatureOf(found, lastScan)
-  if (isForced || signature !== lastSignature) {
+  if (!isOnScreen(lastScan)) {
+    // Drawn again, with whatever has changed, as soon as the page is back on screen.
+    isHeld = isHeld || isForced || signature !== lastSignature
+  } else if (isForced || signature !== lastSignature) {
     lastSignature = signature
+    isHeld = false
     await update($, sessions, () => found)
   }
 
@@ -437,6 +455,7 @@ async function board($: EngineInterface): Promise<Board> {
   return {
     list,
     resting: v.showEnded ? 0 : arrange(all, now, true, keep).filter(s => s.id !== keep && isDormant(s, now)).length,
+    probe: isDebugging,
     sum: summarize(list, now),
     limits: withForecast(currentLimits(all, now), now),
     v,
@@ -673,9 +692,31 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const tree = dashboard($.ui.resolve(e), e.surface, await board($), actionsFor($), e.props.bodyColumns, await frameFor($, e.surface))
-    await dumpPane($, e.surface, e.props.bodyColumns, tree, `bodyRows=${e.props.scroll?.bodyRows} rows=${e.viewport?.rows}`)
+    const ui = $.ui.resolve(e)
+    const b = await board($)
+    const tree = dashboard(ui, e.surface, b, actionsFor($), e.props.bodyColumns, await frameFor($, e.surface))
+    // Only a colony drawn in the page can say whether the page is on screen.
+    const hasColony = 'Client' in ui && b.v.showColony !== false && b.list.length > 0
+    colonyAt = hasColony ? colonyAt || (await $.clock.now()) : 0
+    await dumpPane($, e.surface, e.props.bodyColumns, tree, `bodyRows=${e.props.scroll?.bodyRows} rows=${e.viewport?.rows} onScreen=${isOnScreen(await $.clock.now())}`)
     return tree
+  })
+
+  // The colony's page: on screen (its clock at full speed), and while debugging how it keeps time.
+  on('ui.message', { component: 'Pane', requestId: PANE }, async ($, e, next) => {
+    const data = (e.data ?? {}) as { seen?: unknown; probe?: unknown }
+    const now = await $.clock.now()
+    if (data.seen === true) {
+      const wasOff = !isOnScreen(now)
+      seenAt = now
+      // Back on screen: draw what was held at once.
+      if (wasOff && isHeld) void scan($, true)
+    }
+    if (dir !== '' && isDebugging && data.probe !== undefined) {
+      probeLines = [...probeLines, `${new Date(now).toISOString()} ${myId.slice(0, 8)} ${JSON.stringify(data.probe)}`].slice(-60)
+      await $.fs.write(`${dir}/.debug-colony.txt`, `${probeLines.join('\n')}\n`).catch(() => undefined)
+    }
+    return next(e)
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
@@ -848,11 +889,6 @@ export const register: Register = on => {
       agents: [...s.agents.filter(a => a.id !== agent.id), agent].slice(-30),
       tally: s.tally ? { ...s.tally, agents: s.tally.agents + 1 } : s.tally,
     }))
-    // The panel opens by itself once, at the session's first subagent, unless the person closed it.
-    if (mine !== null && !mine.panelOpenedOnce && !mine.panelClosed && !isPaneOpen) {
-      await patch($, s => ({ ...s, panelOpenedOnce: true }))
-      $.clock.after(1, () => void $.ui.open({ id: PANE, title: 'Fleet' }).then(opened => (isPaneOpen = opened.isPlaced)))
-    }
     return started
   })
 
